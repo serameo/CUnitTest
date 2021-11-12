@@ -1,14 +1,18 @@
 /*
  * File name: m_safedb.c
  * Author: Seree Rakwong
- * Date: 12-NOV-2021
+ * Date: 10-NOV-2021
  *
  * NOTE:
  *  Date        By      Reason
  *  =========   ====    ================================================
  *
  */
+#include <msesysid.h>
+#include <msedef.h>
+#include <stidef.h>
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -23,18 +27,26 @@ extern "C"
 {
 #endif
 
+static long safedb_errno = SAFEDB_OK;
+
 safedb_ptr safedb_new()
 {
     safedb_ptr db = (safedb_ptr)malloc(sizeof(safedb_t));
+    safedb_errno = SAFEDB_OK;
     if (db)
     {
         db->db = 0;
+    }
+    else
+    {
+        safedb_errno = SAFEDB_EMEM;
     }
     return db;
 }
 
 void safedb_del(safedb_ptr _db)
 {
+    safedb_errno = SAFEDB_OK;
     if (_db)
     {
         safedb_close(_db);
@@ -46,6 +58,8 @@ long safedb_open(safedb_ptr _db, const char *_dbfile)
 {
     long rc = 0;
     sqlite3 *db;
+
+    safedb_errno = SAFEDB_OK;
     if (_db->db)
     {
         return rc;
@@ -54,6 +68,7 @@ long safedb_open(safedb_ptr _db, const char *_dbfile)
     if (rc != SQLITE_OK)
     {
         sqlite3_close(db);
+        safedb_errno = SAFEDB_ESQL;
         return rc;
     }
     _db->db = db;
@@ -62,6 +77,7 @@ long safedb_open(safedb_ptr _db, const char *_dbfile)
 
 void safedb_close(safedb_ptr _db)
 {
+    safedb_errno = SAFEDB_OK;
     if (_db->db)
     {
         sqlite3_close(_db->db);
@@ -73,13 +89,16 @@ long safedb_exec(safedb_ptr _db, const char* _sqlcmd, safedb_exec_callback _call
 {
     long rc = 0;
     char *errmsg = 0;
+    safedb_errno = SAFEDB_OK;
     if (!_db->db)
     {
+        safedb_errno = SAFEDB_ERROR;
         return -1;
     }
     rc = sqlite3_exec(_db->db, _sqlcmd, _callback, _userptr, &errmsg);
     if (rc != SQLITE_OK)
     {
+        safedb_errno = SAFEDB_ESQL;
         sqlite3_free(errmsg);
     }
     return rc;
@@ -101,10 +120,12 @@ safedb_sel_ptr  safedb_select(safedb_ptr _db, const char *_sqlcmd, safedb_copy_c
     char *value = 0;
     long size = _size;
 
+    safedb_errno = SAFEDB_OK;
 L000_INIT:
     if (!_callback || _size <= 0)
     {
         /*required callback and size correctly*/
+        safedb_errno = SAFEDB_ERROR;
         return 0;
     }
 
@@ -114,6 +135,7 @@ L100_PREPARE_SQL:
     if (rc != SQLITE_OK)
     {
         sqlite3_finalize(stmt);
+        safedb_errno = SAFEDB_ESQL;
         return 0;
     }
 
@@ -148,6 +170,7 @@ L400_ALLOC_NEW_OBJECT_RETURNED:
     if (!sel)
     {
         free(items);
+        safedb_errno = SAFEDB_EMEM;
         return 0;
     }
     sel->nrows  = nrows;
@@ -193,15 +216,18 @@ L1000_EXIT_FUNCTION:
 void* safedb_sel_get(safedb_sel_ptr _selptr, long _row)
 {
     void* ptr = 0;
+    safedb_errno = SAFEDB_ERROR;
     if (_row >= 0 && _row < _selptr->nrows)
     {
         ptr = (void*)((char*)(_selptr->items) + (_row * _selptr->size));
+        safedb_errno = SAFEDB_OK;
     }
     return ptr;
 }
 
 void safedb_sel_free(safedb_sel_ptr _selptr)
 {
+    safedb_errno = SAFEDB_OK;
     if (_selptr)
     {
         free(_selptr->items);
@@ -215,10 +241,12 @@ double safedb_aggregate(safedb_ptr _db, const char *_sqlcmd)
     double agg = 0.0;
     int rc = SQLITE_OK;
 
+    safedb_errno = SAFEDB_OK;
     rc = sqlite3_prepare_v2(_db->db, _sqlcmd, -1, &stmt, 0);
     /*rc = sqlite3_prepare_v3(_db->db, _sqlcmd, -1, 0, &stmt, 0);*/
     if (rc != SQLITE_OK)
     {
+        safedb_errno = SAFEDB_ESQL;
         return 0;
     }
     do
