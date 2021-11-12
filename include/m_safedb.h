@@ -21,6 +21,10 @@
 extern "C" {
 #endif
 
+#define SAFEDB_OK           ( 0)
+#define SAFEDB_ERROR        (-1)
+#define SAFEDB_EMEM         (-2)
+#define SAFEDB_ESQL         (-3)
 
 struct _safedb
 {
